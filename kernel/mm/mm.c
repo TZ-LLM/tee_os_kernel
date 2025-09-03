@@ -78,6 +78,24 @@ void mm_init(void *physmem_info)
      * physmem. */
     physmem_map_num = 0;
     parse_mem_map(physmem_info);
+#ifdef HIGH_SECURE_DEBUG
+    int diff_page_ctr = 0;
+    for (unsigned long i = 0; i < 0x100000 / 4096; ++i) {
+        int if_diff_page = 0;
+        for (unsigned j = 0; j < 4096; ++j) {
+            if (*(unsigned char*)phys_to_virt(0x20000000 + i*4096+j) != *((unsigned char*)phys_to_virt(i*4096 + j))) {
+                if_diff_page = 1;
+                // kinfo("zzh: diff at addr 0x%lx\n", i);
+            }
+        }
+        if (if_diff_page) {
+            // kinfo("zzh: page %d different\n", i);
+            diff_page_ctr++;
+        }
+    }
+
+    kinfo("after parse_mem_map: diff_page_ctr %d\n", diff_page_ctr);
+#endif
 
     /* Step-2: init the buddy allocators for each continuous range of the
      * physmem. */

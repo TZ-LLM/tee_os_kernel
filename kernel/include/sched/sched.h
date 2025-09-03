@@ -132,6 +132,6 @@ static inline int sched_dequeue(struct thread *thread)
 
 /* Syscalls */
 void sys_yield(void);
-void sys_top(void);
+void sys_top(int secure);
 
 #endif /* SCHED_SCHED_H */

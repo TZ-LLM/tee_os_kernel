@@ -29,8 +29,42 @@ typedef unsigned pmo_type_t;
 #ifdef CHCORE_OH_TEE
 #define PMO_TZ_NS 7 /* TrustZone non-secure memory */
 #endif /* CHCORE_OH_TEE */
+#define PMO_S2 8
+#define PMO_TZASC_CMA 9
 
 #define PMO_FORBID 10 /* Forbidden area: avoid overflow */
+
+struct tzasc_cma_entry {
+	unsigned long offset;
+	unsigned long size;
+	void *cma_pages;
+};
+
+struct tzasc_cma_meta {
+	unsigned long base;
+	unsigned long size;
+	unsigned long count;
+	struct tzasc_cma_entry entry[0];
+};
+
+struct s2_l0_meta_entry {
+    unsigned long paddr;
+    unsigned long size;
+};
+
+struct s2_l0_meta {
+    unsigned long entry_nr;
+    struct s2_l0_meta_entry entry[0];
+};
+
+struct s2_l1_meta_entry {
+    unsigned long paddr;
+    unsigned long size;
+};
+
+struct s2_l1_meta {
+    struct s2_l1_meta_entry entry[0];
+};
 
 #ifdef CHCORE_OH_TEE
 struct ns_pmo_private {
@@ -62,7 +96,16 @@ struct pmobject {
     struct lock owner_lock;
     struct cap_group *owner;
 #endif /* CHCORE_OH_TEE */
+    unsigned long entry_begin;
+    unsigned long entry_end;
 };
+
+void s2_meta_init(unsigned long s2_meta_paddr);
+cap_t sys_create_s2_pmo(unsigned long entry_begin, unsigned long entry_end);
+cap_t sys_create_tzasc_cma_pmo(unsigned long paddr, unsigned long size);
+int sys_map_tzasc_cma_meta(unsigned long vaddr);
+int sys_map_tzasc_cma_pmo(unsigned long vaddr, unsigned long len, paddr_t paddr);
+struct s2_l1_meta *get_s2_l1_meta(void);
 
 /* kernel internal interfaces */
 cap_t create_pmo(size_t size, pmo_type_t type, struct cap_group *cap_group,
@@ -99,6 +142,9 @@ int sys_destroy_ns_pmo(cap_t cap_group, cap_t pmo);
 cap_t sys_create_tee_shared_pmo(cap_t cap_group, struct tee_uuid *uuid,
                                 unsigned long size, cap_t *self_cap);
 int sys_transfer_pmo_owner(cap_t pmo, cap_t cap_group);
+
+int sys_config_tzasc(int rgn_id, unsigned long base_addr, unsigned long top_addr);
+
 #endif /* CHCORE_OH_TEE */
 
 #endif /* OBJECT_MEMORY_H */

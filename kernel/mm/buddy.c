@@ -126,6 +126,8 @@ static struct page *merge_chunk(struct phys_mem_pool *pool, struct page *chunk)
  *
  * The usable memory: [pool_start_addr, pool_start_addr + pool_mem_size).
  */
+#include <arch/mmu.h>
+#include <arch/boot.h>
 void init_buddy(struct phys_mem_pool *pool, struct page *start_page,
                 vaddr_t start_addr, unsigned long page_num)
 {
@@ -148,9 +150,49 @@ void init_buddy(struct phys_mem_pool *pool, struct page *start_page,
         init_list_head(&(pool->free_lists[order].free_list));
     }
 
+#ifdef HIGH_SECURE_DEBUG
+    int diff_page_ctr = 0;
+    for (unsigned long i = 0; i < 0x100000 / 4096; ++i) {
+        int if_diff_page = 0;
+        for (unsigned j = 0; j < 4096; ++j) {
+            if (*(unsigned char*)phys_to_virt(0x20000000 + i*4096+j) != *((unsigned char*)phys_to_virt(i*4096 + j))) {
+                if_diff_page = 1;
+                // kinfo("zzh: diff at addr 0x%lx\n", i);
+            }
+        }
+        if (if_diff_page) {
+            // kinfo("zzh: page %d different\n", i);
+            diff_page_ctr++;
+        }
+    }
+    // if (diff_page_ctr > 9) {
+        kinfo("167 diff_page_ctr %d\n", diff_page_ctr);
+    // }
+    kinfo("zzh: init_buddy: before memset, page_num=%lu, start_page=%p, start_addr=0x%lx, memset size is 0x%lx\n", page_num, start_page, start_addr, page_num * sizeof(struct page));
+#endif
     /* Clear the page_metadata area. */
     memset((char *)start_page, 0, page_num * sizeof(struct page));
 
+#ifdef HIGH_SECURE_DEBUG
+    paddr_t start_page_pa;
+    query_in_pgtbl((void *)((unsigned long)boot_ttbr1_l0 + KBASE), (vaddr_t)start_page, &start_page_pa, 0);
+    kinfo("zzh: start_page_pa: 0x%lx\n", start_page_pa);
+    diff_page_ctr = 0;
+    for (unsigned long i = 0; i < 0x100000 / 4096; ++i) {
+        int if_diff_page = 0;
+        for (unsigned j = 0; j < 4096; ++j) {
+            if (*(unsigned char*)phys_to_virt(0x20000000 + i*4096+j) != *((unsigned char*)phys_to_virt(i*4096 + j))) {
+                if_diff_page = 1;
+                // kinfo("zzh: diff at addr 0x%lx\n", i);
+            }
+        }
+        if (if_diff_page) {
+            // kinfo("zzh: page %d different\n", i);
+            diff_page_ctr++;
+        }
+    }
+    kinfo("188 diff_page_ctr %d\n", diff_page_ctr);
+#endif
     /* Init the page_metadata area. */
     for (page_idx = 0; page_idx < page_num; ++page_idx) {
         page = start_page + page_idx;
@@ -158,6 +200,24 @@ void init_buddy(struct phys_mem_pool *pool, struct page *start_page,
         page->order = 0;
         page->pool = pool;
     }
+
+#ifdef HIGH_SECURE_DEBUG
+    diff_page_ctr = 0;
+    for (unsigned long i = 0; i < 0x100000 / 4096; ++i) {
+        int if_diff_page = 0;
+        for (unsigned j = 0; j < 4096; ++j) {
+            if (*(unsigned char*)phys_to_virt(0x20000000 + i*4096+j) != *((unsigned char*)phys_to_virt(i*4096 + j))) {
+                if_diff_page = 1;
+                // kinfo("zzh: diff at addr 0x%lx\n", i);
+            }
+        }
+        if (if_diff_page) {
+            // kinfo("zzh: page %d different\n", i);
+            diff_page_ctr++;
+        }
+    }
+    kinfo("213 diff_page_ctr %d\n", diff_page_ctr);
+#endif
 
     /* Put each physical memory page into the free lists. */
     for (page_idx = 0; page_idx < page_num; ++page_idx) {

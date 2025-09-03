@@ -18,12 +18,12 @@
 #include <arch/trustzone/smc.h>
 #include <arch/trustzone/tlogger.h>
 
+struct lock smc_struct_lock;
 struct smc_percpu_struct {
-    bool pending_req;
     struct thread *waiting_thread;
     struct smc_registers regs_k;
     struct smc_registers *regs_u;
-} smc_percpu_structs[PLAT_CPU_NUM];
+} smc_percpu_structs;
 
 paddr_t smc_ttbr0_el1;
 
@@ -42,11 +42,8 @@ void smc_init(void)
     u32 cpuid;
     struct smc_percpu_struct *percpu;
 
-    for (cpuid = 0; cpuid < PLAT_CPU_NUM; cpuid++) {
-        percpu = &smc_percpu_structs[cpuid];
-        percpu->pending_req = false;
-        percpu->waiting_thread = NULL;
-    }
+    percpu = &smc_percpu_structs;
+    percpu->waiting_thread = NULL;
 
     init_smc_page_table();
 }
@@ -59,105 +56,162 @@ void handle_yield_smc(unsigned long x0, unsigned long x1, unsigned long x2,
 {
     int ret;
     struct smc_percpu_struct *percpu;
+    static bool meta_init = false;
+    // kinfo("DEBUG: %s CPU %d: x: [%lx %lx %lx %lx %lx]\n",
+    //     __func__, smp_get_cpu_id(), x0, x1, x2, x3, x4);
 
-    enable_tlogger();
+#if FPU_SAVING_MODE == EAGER_FPU_MODE
+    save_fpu_state(ree_thread);
+#endif
 
-    kinfo("%s x: [%lx %lx %lx %lx %lx]\n", __func__, x0, x1, x2, x3, x4);
+    BUG_ON(current_thread);
 
-    /* Switch from SMC page table to process page table */
-    switch_vmspace_to(current_thread->vmspace);
-
-    if (!kernel_shared_var_recved && x2 == 0xf) {
-        kernel_shared_var_recved = true;
-        kernel_var.params_stack[0] = x0;
-        kernel_var.params_stack[1] = x1;
-        kernel_var.params_stack[2] = x2;
-        kernel_var.params_stack[3] = x3;
-        kernel_var.params_stack[4] = x4;
+    if (!meta_init) {
+        meta_init = true;
+        // s2_meta_init(x3);
+        tzasc_cma_meta_init(x4);
     }
-
-    percpu = &smc_percpu_structs[smp_get_cpu_id()];
-    if (percpu->pending_req) {
-        sched();
-        eret_to_thread(switch_context());
-    }
-    percpu->regs_k.x0 = TZ_SWITCH_REQ_STD_REQUEST;
-    percpu->regs_k.x1 = x1;
-    percpu->regs_k.x2 = x2;
-    percpu->regs_k.x3 = x3;
-    percpu->regs_k.x4 = x4;
 
     if (percpu->waiting_thread) {
-        struct thread *current = current_thread;
-        switch_thread_vmspace_to(percpu->waiting_thread);
-        ret = copy_to_user((char *)percpu->regs_u,
-                           (char *)&percpu->regs_k,
-                           sizeof(percpu->regs_k));
-        switch_thread_vmspace_to(current);
-        arch_set_thread_return(percpu->waiting_thread, ret);
+        percpu = &smc_percpu_structs;
+        lock(&smc_struct_lock);
+        percpu->regs_k.x0 = TZ_SWITCH_REQ_STD_REQUEST;
+        percpu->regs_k.x1 = x1;
+        percpu->regs_k.x2 = x2;
+        percpu->regs_k.x3 = x3;
+        percpu->regs_k.x4 = x4;
+
+        // kinfo("%s %d: wake up waiting thread\n", __func__, __LINE__);
+        // kinfo("%s\n", percpu->waiting_thread->cap_group->cap_group_name);
+        // switch_vmspace_to(percpu->waiting_thread);
+        // BUG_ON(copy_to_user(percpu->regs_u, &percpu->regs_k, sizeof(struct smc_registers)));
+        arch_set_thread_return(percpu->waiting_thread, x1);
         percpu->waiting_thread->thread_ctx->state = TS_INTER;
         BUG_ON(sched_enqueue(percpu->waiting_thread));
         percpu->waiting_thread = NULL;
-    } else {
-        percpu->pending_req = true;
+        unlock(&smc_struct_lock);
+    }
+    // kinfo("%s %d: cpu %d enters tee\n", __func__, __LINE__, smp_get_cpu_id());
+
+    if (x2 >= KBASE) {
+        struct thread *thread = (struct thread *)x2;
+        arch_set_thread_return(thread, x1);
+        BUG_ON(sched_enqueue(thread));
+        // kinfo("%s %d wake up thread %p ret %lx\n", __func__, __LINE__, thread, x1);
+        extern struct tzasc_cma_meta *tzasc_cma_meta;
+        // kinfo("%s %d count %lx\n", __func__, __LINE__, tzasc_cma_meta->count);
+#if FPU_SAVING_MODE == LAZY_FPU_MODE
+        change_fpu_owner_to_ree();
+#endif
+        smc_call(SMC_STD_RESPONSE, SMC_EXIT_PREEMPTED);
     }
 
     sched();
+    // kinfo("current thread %s pc %p\n", current_thread, (void *)arch_get_thread_next_ip(current_thread));
     eret_to_thread(switch_context());
+}
+
+void handle_fiq_smc(unsigned long x0, unsigned long x1, unsigned long x2,
+                    unsigned long x3, unsigned long x4)
+{
+    plat_handle_fiq_irq();
+    smc_call(SMC_FIQ_DONE, 0, 0, 0, 0);
 }
 
 int sys_tee_wait_switch_req(struct smc_registers *regs_u)
 {
     int ret;
     struct smc_percpu_struct *percpu;
+    // kinfo("%s %d\n", __func__, __LINE__);
 
-    percpu = &smc_percpu_structs[smp_get_cpu_id()];
+    percpu = &smc_percpu_structs;
 
-    if (percpu->pending_req) {
-        percpu->pending_req = false;
-        ret = copy_to_user(
-            (char *)regs_u, (char *)&percpu->regs_k, sizeof(percpu->regs_k));
-        return ret;
-    }
+    lock(&smc_struct_lock);
 
-    if (percpu->waiting_thread) {
-        return -EINVAL;
-    }
+    BUG_ON(percpu->waiting_thread);
 
     percpu->waiting_thread = current_thread;
     percpu->regs_u = regs_u;
 
     current_thread->thread_ctx->state = TS_WAITING;
 
+    unlock(&smc_struct_lock);
+
     sched();
     eret_to_thread(switch_context());
     BUG("Should not reach here.\n");
 }
 
-int sys_tee_switch_req(struct smc_registers *regs_u)
+bool not_first_smc[PLAT_CPU_NUM];
+
+unsigned long sys_tee_switch_req(struct smc_registers *regs_u)
 {
     int ret;
     struct smc_registers regs_k;
 
-    ret = copy_from_user((char *)&regs_k, (char *)regs_u, sizeof(regs_k));
-    if (ret < 0) {
-        return ret;
-    }
+    // kinfo("%s %d\n", __func__, __LINE__);
 
-    if (regs_k.x0 == TZ_SWITCH_REQ_ENTRY_DONE) {
-        regs_k.x0 = SMC_ENTRY_DONE;
-        regs_k.x1 = (vaddr_t)&tz_vectors;
-    } else if (regs_k.x0 == TZ_SWITCH_REQ_STD_RESPONSE) {
+#ifdef HIGH_SECURE_DEBUG
+    int diff_ctr = 0;
+    for (unsigned long i = 0; i < 0x100000 / 4096; ++i) {
+        int diff_page = 0;
+        for (unsigned j = 0; j < 4096; ++j) {
+            if (*(unsigned char*)phys_to_virt(0x20000000 + i*4096+j) != *((unsigned char*)phys_to_virt(i*4096 + j))) {
+                diff_ctr++;
+                diff_page = 1;
+                // kinfo("zzh: diff at addr 0x%lx\n", i);
+            }
+        }
+        if (diff_page) {
+            kinfo("zzh: page %d different\n", i);
+        }
+    }
+    kinfo("zzh: total %d byte different\n", diff_ctr);
+#endif
+
+    ret = copy_from_user(&regs_k, regs_u, sizeof(regs_k));
+    BUG_ON(ret);
+
+    bool enqueue = true;
+
+    if (not_first_smc[smp_get_cpu_id()]) {
         regs_k.x0 = SMC_STD_RESPONSE;
-        regs_k.x1 = SMC_EXIT_NORMAL;
+        if (regs_k.x1 != SMC_EXIT_SHADOW) {
+            regs_k.x1 = SMC_EXIT_NORMAL;
+        } else {
+            regs_k.x4 = (unsigned long)current_thread;
+            // kinfo("%s %d waiting thread %p\n", __func__, __LINE__, current_thread);
+            enqueue = false;
+        }
     } else {
-        return -1;
+        if (smp_get_cpu_id() == 0) {
+            kinfo("cpu 0 SMC_ENTRY_DONE\n");
+            regs_k.x0 = SMC_ENTRY_DONE;
+            regs_k.x1 = (vaddr_t)&tz_vectors;
+        } else {
+            // kinfo("cpu %d SMC_ON_DONE\n", smp_get_cpu_id());
+            regs_k.x0 = SMC_ON_DONE;
+            regs_k.x1 = 0;
+        }
+        not_first_smc[smp_get_cpu_id()] = true;
     }
 
-    save_and_release_fpu_owner();
     arch_set_thread_return(current_thread, 0);
+    current_thread->thread_ctx->state = TS_INTER;
+    current_thread->thread_ctx->kernel_stack_state = KS_FREE;
+    if (enqueue) BUG_ON(sched_enqueue(current_thread));
+    current_thread = NULL;
+
+#if FPU_SAVING_MODE == LAZY_FPU_MODE
+    change_fpu_owner_to_ree();
+#endif
     smc_call(regs_k.x0, regs_k.x1, regs_k.x2, regs_k.x3, regs_k.x4);
     BUG("Should not reach here.\n");
+}
+
+void smc_idle_thread_routine(void)
+{
+    BUG("%s %d\n", __func__, __LINE__);
 }
 
 int sys_tee_pull_kernel_var(kernel_shared_varibles_t *kernel_var_ubuf)

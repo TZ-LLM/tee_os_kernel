@@ -26,10 +26,15 @@ BEGIN_FUNC(smc_call)
 	msr 	ttbr0_el1, x5
 	isb
 
-        smc     #0
+    smc     #0
 END_FUNC(smc_call)
 
 BEGIN_FUNC(yield_smc_entry)
 	switch_to_cpu_stack
 	b	handle_yield_smc
 END_FUNC(yield_smc_entry)
+
+BEGIN_FUNC(fiq_entry)
+	switch_to_cpu_stack
+	b	handle_fiq_smc
+END_FUNC(fiq_entry)

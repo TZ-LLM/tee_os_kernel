@@ -131,6 +131,11 @@
 #define CHCORE_SYS_create_tee_shared_pmo 19
 #define CHCORE_SYS_transfer_pmo_owner    20
 #endif /* CHCORE_OH_TEE */
+#define CHCORE_SYS_create_s2_pmo 21
+#define CHCORE_SYS_create_tzasc_cma_pmo 22
+#define CHCORE_SYS_map_tzasc_cma_meta 23
+#define CHCORE_SYS_map_tzasc_cma_pmo 24
+#define CHCORE_SYS_config_tzasc 25
 
 /* - address translation */
 #define CHCORE_SYS_get_phys_addr 31
@@ -241,3 +246,5 @@
 #define CHCORE_SYS_tee_switch_req      251
 #define CHCORE_SYS_tee_create_ns_pmo   252
 #define CHCORE_SYS_tee_pull_kernel_var 253
+#define CHCORE_SYS_tee_push_rdr_update_addr2 254
+#define CHCORE_SYS_create_npu_irq_notif 255

@@ -15,10 +15,12 @@
 #include <mm/kmalloc.h>
 #include <irq/ipi.h>
 #include <common/util.h>
+#include <arch/trustzone/smc.h>
 
 /* Scheduler global data */
 struct thread *current_threads[PLAT_CPU_NUM];
 struct thread idle_threads[PLAT_CPU_NUM];
+struct thread ree_threads[PLAT_CPU_NUM];
 
 #if PLAT_CPU_NUM <= 32
 unsigned int resched_bitmaps[PLAT_CPU_NUM];
@@ -225,6 +227,7 @@ vaddr_t switch_context(void)
 
 void do_pending_resched(void)
 {
+    BUG("%s %d\n", __func__, __LINE__);
     unsigned int cpuid;
     unsigned int local_cpuid = smp_get_cpu_id();
     bool local_cpu_need_resched = false;
@@ -411,7 +414,7 @@ static void init_idle_threads(void)
 
         init_thread_ctx(&idle_threads[i], 0, 0, IDLE_PRIO, TYPE_IDLE, i);
 
-        arch_idle_ctx_init(idle_threads[i].thread_ctx, idle_thread_routine);
+        arch_idle_ctx_init(idle_threads[i].thread_ctx, smc_idle_thread_routine);
 
         idle_threads[i].cap_group = idle_cap_group;
         idle_threads[i].vmspace = idle_vmspace;
@@ -429,6 +432,23 @@ static void init_current_threads(void)
     }
 }
 
+void ree_thread_routine(void) {
+    
+}
+
+static void init_ree_threads(void)
+{
+    int i;
+
+    for (i = 0; i < PLAT_CPU_NUM; i++) {
+        // Must be greater than TYPE_KERNEL
+        ree_threads[i].thread_ctx = create_thread_ctx(TYPE_SHADOW);
+        init_thread_ctx(&ree_threads[i], 0, 0, IDLE_PRIO, TYPE_SHADOW, i);
+        arch_idle_ctx_init(ree_threads[i].thread_ctx, idle_thread_routine);
+        ree_threads[i].thread_ctx->is_fpu_owner = i;
+    }
+}
+
 static void init_resched_bitmaps(void)
 {
     memset(resched_bitmaps, 0, sizeof(resched_bitmaps));
@@ -440,6 +460,7 @@ int sched_init(struct sched_ops *sched_ops)
 
     init_idle_threads();
     init_current_threads();
+    init_ree_threads();
     init_resched_bitmaps();
 
     cur_sched_ops = sched_ops;
@@ -456,7 +477,28 @@ void sys_yield(void)
     eret_to_thread(switch_context());
 }
 
-void sys_top(void)
+void sys_top(int secure)
 {
-    cur_sched_ops->sched_top();
+    /* restore npu to non-secure */
+    extern void switch_firewall_ddr(int secure, int core_index);
+    extern void switch_secure_device(int secure, int core_index);
+    if (!(secure & 4)) {
+        switch_firewall_ddr(secure & 1, 0);
+        switch_firewall_ddr(secure & 1, 1);
+        switch_firewall_ddr(secure & 1, 2);
+        switch_secure_device(secure & 1, 0);
+        switch_secure_device(secure & 1, 1);
+        switch_secure_device(secure & 1, 2);
+    }
+
+    /* restore irq to non-secure */
+    extern void set_npu_irqs_ns(void);
+    extern void set_npu_irqs_s(void);
+    if (!(secure & 8)) {
+        if (secure & 1)
+            set_npu_irqs_s();
+        else
+            set_npu_irqs_ns();  
+    }
+    // cur_sched_ops->sched_top();
 }

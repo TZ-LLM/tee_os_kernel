@@ -23,6 +23,7 @@
 
 /* Per-CPU variable current_thread is only accessed by its owner CPU. */
 #define current_thread (current_threads[smp_get_cpu_id()])
+#define ree_thread (&ree_threads[smp_get_cpu_id()])
 #ifdef CHCORE_KERNEL_RT
 /* RT (kernel PREEMT): allocate the stack for each thread  */
 #define DEFAULT_KERNEL_STACK_SZ (0x1000)
@@ -70,6 +71,7 @@ struct thread {
 
 extern struct thread *current_threads[PLAT_CPU_NUM];
 extern struct thread idle_threads[PLAT_CPU_NUM];
+extern struct thread ree_threads[PLAT_CPU_NUM];
 
 /* Used for creating the root thread */
 extern const char binary_procmgr_bin_start;

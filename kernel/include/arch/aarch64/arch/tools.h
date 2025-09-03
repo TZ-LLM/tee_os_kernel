@@ -17,6 +17,8 @@ void enable_irq(void);
 void disable_irq(void);
 void enable_uart_irq(int irqno);
 void uart_irq_handler(void);
+void put8(unsigned long addr, unsigned char data);
+unsigned char get8(unsigned long addr);
 void put32(unsigned long addr, unsigned int data);
 unsigned int get32(unsigned long addr);
 

@@ -42,6 +42,7 @@ typedef struct {
 
 static inline void prio_spin_lock(prio_spinlock_t *lock)
 {
+    // usys_disable_local_irq();
     int old_prio = usys_get_prio(0);
     if (lock->old_prio <= 55) {
         (void)usys_set_prio(0, 55);
@@ -57,6 +58,7 @@ static inline void prio_spin_unlock(prio_spinlock_t *lock)
     if (old_prio <= 55) {
         (void)usys_set_prio(0, old_prio);
     }
+    // usys_enable_local_irq();
 }
 
 /*

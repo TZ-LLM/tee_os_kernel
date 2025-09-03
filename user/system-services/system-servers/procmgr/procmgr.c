@@ -452,10 +452,10 @@ void boot_default_apps(void)
     procmgr_launch_process(
         1, &chanmgr_argv, "chanmgr", true, INIT_BADGE, NULL, COMMON_APP);
     /* Start OH-TEE gtask. */
-    char *gtask_argv = "/gtask.elf";
-    struct proc_node *gtask_node = procmgr_launch_process(
-        1, &gtask_argv, "gtask", true, INIT_BADGE, NULL, COMMON_APP);
-    printf("procmgr_launch_process gtask pid %d\n", gtask_node->pid);
+    // char *gtask_argv = "/gtask.elf";
+    // struct proc_node *gtask_node = procmgr_launch_process(
+    //     1, &gtask_argv, "gtask", true, INIT_BADGE, NULL, COMMON_APP);
+    // printf("procmgr_launch_process gtask pid %d\n", gtask_node->pid);
 #endif /* CHCORE_OH_TEE */
 }
 

@@ -45,6 +45,13 @@ void enable_cpu_cnt(void)
                                       | PMUSERENR_EL0_CR | PMUSERENR_EL0_ER));
     asm volatile("msr pmcr_el0, %0" ::"r"(PMCR_EL0_LC | PMCR_EL0_E));
     asm volatile("msr pmcntenset_el0, %0" ::"r"(PMCNTENSET_EL0_C));
+    asm volatile("mrs x0, cntkctl_el1\n\t"
+                 "orr x0, x0, #(1 << 0)\n\t"
+                 "orr x0, x0, #(1 << 1)\n\t"
+                 "msr cntkctl_el1, x0\n\t"
+                 :
+                 :
+                 : "x0");
 }
 
 void disable_cpu_cnt(void)

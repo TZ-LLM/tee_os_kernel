@@ -563,6 +563,7 @@ void sys_disable_local_irq(void)
 
 void sys_enable_local_irq(void)
 {
+    // current_thread->thread_ctx->ec.reg[SPSR_EL1] |= (SPSR_EL1_FIQ);
     current_thread->thread_ctx->ec.reg[SPSR_EL1] &= (~(SPSR_EL1_FIQ));
 }
 

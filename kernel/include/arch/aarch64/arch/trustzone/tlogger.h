@@ -70,4 +70,6 @@ int append_chcore_log(const char *str, size_t len, bool is_kernel);
 int sys_tee_push_rdr_update_addr(paddr_t addr, size_t size, bool is_cache_mem,
                                  char *chip_type_buff, size_t buff_len);
 
+int sys_tee_push_rdr_update_addr2(paddr_t addr, size_t size, bool is_cache_mem,
+                                 char *chip_type_buff, size_t buff_len);
 int sys_debug_rdr_logitem(char *str, size_t str_len);

@@ -124,7 +124,7 @@ struct pbrr_ready_queue {
     struct lock lock;
 };
 
-static struct pbrr_ready_queue pbrr_ready_queues[PLAT_CPU_NUM];
+static struct pbrr_ready_queue pbrr_ready_queues;
 
 int pbrr_sched_enqueue(struct thread *thread)
 {
@@ -149,7 +149,7 @@ int pbrr_sched_enqueue(struct thread *thread)
     thread->thread_ctx->cpuid = cpuid;
     thread->thread_ctx->state = TS_READY;
 
-    ready_queue = &pbrr_ready_queues[cpuid];
+    ready_queue = &pbrr_ready_queues;
     lock(&ready_queue->lock);
     if (thread->thread_ctx->type != TYPE_IDLE)
         obj_ref(thread);
@@ -177,7 +177,7 @@ static void __pbrr_sched_dequeue(struct thread *thread)
 
     cpuid = thread->thread_ctx->cpuid;
     prio = thread->thread_ctx->sc->prio;
-    ready_queue = &pbrr_ready_queues[cpuid];
+    ready_queue = &pbrr_ready_queues;
 
     thread->thread_ctx->state = TS_INTER;
     list_del(&thread->ready_queue_node);
@@ -201,7 +201,7 @@ static struct thread *pbrr_sched_choose_thread(void)
     bool current_thread_runnable;
 
     cpuid = smp_get_cpu_id();
-    ready_queue = &pbrr_ready_queues[cpuid];
+    ready_queue = &pbrr_ready_queues;
 
     thread = current_thread;
     current_thread_runnable = thread != NULL
@@ -242,11 +242,8 @@ retry:
      */
     thread = find_runnable_thread(&ready_queue->queues[highest_prio]);
     if (thread == NULL) {
-        thread = &idle_threads[cpuid];
-        if (thread == current_thread) {
-            BUG_ON(!current_thread_runnable);
-            goto out_unlock_ready_queue;
-        }
+        thread = find_runnable_thread(&ready_queue->queues[1]);
+        BUG_ON(thread == NULL);
     }
 
     __pbrr_sched_dequeue(thread);
@@ -283,6 +280,7 @@ int pbrr_sched(void)
 
     new = pbrr_sched_choose_thread();
     BUG_ON(new == NULL);
+    // kinfo("cpu %d choose thread %s prio %d\n", smp_get_cpu_id(), new->cap_group->cap_group_name, new->thread_ctx->sc->prio);
 
     if (old != NULL && old->thread_ctx->state == TS_RUNNING && new != old) {
         BUG_ON(pbrr_sched_enqueue(old));
@@ -302,12 +300,10 @@ static int pbrr_sched_init(void)
     unsigned int i, j;
 
     /* Initialize the ready queues */
-    for (i = 0; i < PLAT_CPU_NUM; i++) {
-        prio_bitmap_init(&pbrr_ready_queues[i].bitmap);
-        lock_init(&pbrr_ready_queues[i].lock);
-        for (j = 0; j < PRIO_NUM; j++) {
-            init_list_head(&pbrr_ready_queues[i].queues[j]);
-        }
+    prio_bitmap_init(&pbrr_ready_queues.bitmap);
+    lock_init(&pbrr_ready_queues.lock);
+    for (j = 0; j < PRIO_NUM; j++) {
+        init_list_head(&pbrr_ready_queues.queues[j]);
     }
 
     /* Insert the idle threads into the ready queues */

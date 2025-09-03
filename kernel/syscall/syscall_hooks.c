@@ -21,6 +21,7 @@
 
 int hook_sys_create_device_pmo(unsigned long paddr, unsigned long size)
 {
+    return 0;
     /* This one is provided for user-level drivers only. */
     if (current_cap_group->badge >= APP_BADGE_START
         || current_cap_group->badge < DRIVER_BADGE_START) {
@@ -32,6 +33,7 @@ int hook_sys_create_device_pmo(unsigned long paddr, unsigned long size)
 
 int hook_sys_get_phys_addr(vaddr_t va, paddr_t *pa_buf)
 {
+    return 0;
     /* This one is only used in drivers and unit test now. */
     if (current_cap_group->badge >= APP_BADGE_START
         || current_cap_group->badge < DRIVER_BADGE_START) {

@@ -16,6 +16,7 @@
     do {                                                          \
         if ((expr)) {                                             \
             printf("BUG: %s:%d %s\n", __func__, __LINE__, #expr); \
+            *(int *)0x123 = 123;                                  \
             for (;;) {                                            \
             }                                                     \
         }                                                         \

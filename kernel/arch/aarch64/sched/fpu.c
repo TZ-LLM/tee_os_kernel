@@ -229,12 +229,13 @@ void save_and_release_fpu(struct thread *thread)
         disable_fpu_usage();
     }
 }
-
-void save_and_release_fpu_owner(void)
+void change_fpu_owner_to_ree(void)
 {
     struct per_cpu_info *info;
     struct thread *fpu_owner;
     u32 cpuid;
+
+    enable_fpu_usage();
 
     cpuid = smp_get_cpu_id();
     lock(&fpu_owner_locks[cpuid]);
@@ -243,14 +244,25 @@ void save_and_release_fpu_owner(void)
     info = get_per_cpu_info();
     fpu_owner = info->fpu_owner;
 
-    if (fpu_owner) {
-        save_fpu_state(fpu_owner);
-        fpu_owner->thread_ctx->is_fpu_owner = -1;
-        info->fpu_owner = NULL;
-        disable_fpu_usage();
+    /* REE (fpu_owner) -> TEE (no using FPU) -> REE */
+    if (fpu_owner == ree_thread) {
+        unlock(&fpu_owner_locks[cpuid]);
+        return;
     }
 
+    /* Save the fpu states for the ree owner */
+    if (fpu_owner) {
+        save_fpu_state(fpu_owner);
+        smp_mb();
+        fpu_owner->thread_ctx->is_fpu_owner = -1;
+    }
+
+    /* Set ree_thread as the new owner */
+    info->fpu_owner = ree_thread;
     unlock(&fpu_owner_locks[cpuid]);
+    restore_fpu_state(ree_thread);
+    disable_fpu_usage();
+    ree_thread->thread_ctx->is_fpu_owner = cpuid;
 }
 
 #endif

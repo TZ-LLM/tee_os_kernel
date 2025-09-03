@@ -18,10 +18,11 @@ BEGIN_FUNC(fast_smc_entry)
         smc     #0
 END_FUNC(fast_smc_entry)
 
-BEGIN_FUNC(cpu_on_entry)
+BEGIN_FUNC(cpu_on_entry) /* try use C instead */
+        bl      cpu_on_handler
         ldr     x0, =SMC_ON_DONE
         mov     x1, #0
-        smc     #0
+        b       smc_call
 END_FUNC(cpu_on_entry)
 
 BEGIN_FUNC(cpu_off_entry)
@@ -41,12 +42,6 @@ BEGIN_FUNC(cpu_suspend_entry)
         mov     x1, #0
         smc     #0
 END_FUNC(cpu_suspend_entry)
-
-BEGIN_FUNC(fiq_entry)
-        ldr     x0, =SMC_FIQ_DONE
-        mov     x1, #0
-        smc     #0
-END_FUNC(fiq_entry)
 
 BEGIN_FUNC(system_off_entry)
         ldr     x0, =SMC_SYSOFF_DONE

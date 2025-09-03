@@ -300,6 +300,46 @@ int signal_notific(struct notification *notifc)
     return 0;
 }
 
+int signal_notific_direct(struct notification *notifc)
+{
+    struct thread *target = NULL;
+
+    lock(&notifc->notifc_lock);
+
+    /* For recycling: the state is set in stop_notification */
+    if (notifc->state == OBJECT_STATE_INVALID) {
+        unlock(&notifc->notifc_lock);
+        return -ECAPBILITY;
+    }
+
+    if (notifc->not_delivered_notifc_count > 0
+        || notifc->waiting_threads_count == 0) {
+        notifc->not_delivered_notifc_count++;
+        unlock(&notifc->notifc_lock);
+    } else {
+        /*
+         * Some threads have been blocked and waiting for notifc.
+         * Wake up one waiting thread
+         */
+        target = list_entry(notifc->waiting_threads.next,
+                            struct thread,
+                            notification_queue_node);
+
+        BUG_ON(target == NULL);
+
+        /* Delete the thread from the waiting list of the notification
+         */
+        list_del(&target->notification_queue_node);
+        notifc->waiting_threads_count--;
+
+        unlock(&notifc->notifc_lock);
+        sched_to_thread(target);
+    }
+
+    return 0;
+}
+
+
 cap_t sys_create_notifc(void)
 {
     struct notification *notifc = NULL;

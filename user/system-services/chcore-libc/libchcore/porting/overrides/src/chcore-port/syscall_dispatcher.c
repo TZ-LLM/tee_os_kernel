@@ -650,7 +650,8 @@ pid_t chcore_waitpid(pid_t pid, int *status, int options, int d)
     if (ret > 0) {
         /* Get the actual exit status. */
         reply_pr = (struct proc_request *)ipc_get_msg_data(ipc_msg);
-        *status = reply_pr->wait.exitstatus;
+        if (status)
+            *status = reply_pr->wait.exitstatus;
     }
     // debug("pid=%d => exitstatus: %d\n", pid, pr.exitstatus);
 
@@ -727,6 +728,8 @@ long __syscall4(long n, long a, long b, long c, long d)
     }
     case SYS_epoll_ctl:
         return chcore_epoll_ctl(a, b, c, (struct epoll_event *)d);
+    case SYS_fadvise64: // llama add
+        return 0; // llama add
     default:
         dead(n);
         // chcore_syscall4(n, a, b, c, d);

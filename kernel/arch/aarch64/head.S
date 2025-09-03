@@ -47,6 +47,7 @@ END_FUNC(start_kernel)
 
 BEGIN_FUNC(secondary_cpu_boot)
     mov     x19, x0
+    mov     x20, x30
 
     mov     x1, #CPU_STACK_SIZE
     mul     x2, x0, x1
@@ -55,19 +56,11 @@ BEGIN_FUNC(secondary_cpu_boot)
     add     x2, x2, CPU_STACK_SIZE
     mov     sp, x2
 
-    /*
-     * Make sure that no translation based
-     * on boot page table can happen.
-     */
-    adrp    x3, empty_page
-    msr     ttbr0_el1, x3
-    isb
-    /*  
-     * Call flush_tlb_all here to flush all the cached TLBs for
-     * the boot time TTBR0_EL1.
-     */
-    bl      flush_tlb_all
-
     mov     x0, x19
     bl      secondary_start
+
+/***************** Begin return *****************/
+	mov     x30, x20
+	ret
+/****************** End return ******************/
 END_FUNC(secondary_cpu_boot)

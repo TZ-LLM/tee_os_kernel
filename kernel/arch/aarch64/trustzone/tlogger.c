@@ -20,6 +20,7 @@
 #include <common/lock.h>
 
 #define LOGGER_BASE     0xFFFFFD0000000000
+#define LLAMAOUT_BASE     0xFFFFFC0000000000
 #define TMP_LOGGER_SIZE (PAGE_SIZE << 6)
 
 #define LOG_ITEM_MAGIC     0x5A5A
@@ -37,16 +38,19 @@ extern unsigned long boot_ttbr1_l0[];
 
 void enable_tlogger(void)
 {
+    return;
     using_tlogger = true;
 }
 
 bool is_tlogger_on(void)
 {
+    return false;
     return using_tlogger;
 }
 
 int append_rdr_log(const void *buf, size_t len)
 {
+    return 0;
     int ret = 0;
 
     lock(&tlogger_lock);
@@ -68,6 +72,7 @@ out_unlock:
 
 int append_chcore_log(const char *str, size_t len, bool is_kernel)
 {
+    return 0;
     int ret, count;
     struct log_item *item;
     size_t item_size;
@@ -121,6 +126,7 @@ int append_chcore_log(const char *str, size_t len, bool is_kernel)
 
 int tmp_tlogger_init(void)
 {
+    return 0;
     logger = kmalloc(TMP_LOGGER_SIZE);
     if (logger == NULL) {
         return -ENOMEM;
@@ -135,6 +141,7 @@ int tmp_tlogger_init(void)
 int sys_tee_push_rdr_update_addr(paddr_t addr, size_t size, bool is_cache_mem,
                                  char *chip_type_buff, size_t buff_len)
 {
+    return 0;
     int ret;
     struct log_buffer *tmp_logger;
     size_t copy_len;
@@ -163,8 +170,41 @@ out:
     return ret;
 }
 
+int sys_tee_push_rdr_update_addr2(paddr_t addr, size_t size, bool is_cache_mem,
+                                 char *chip_type_buff, size_t buff_len)
+{
+    return 0;
+    int ret;
+    // struct log_buffer *tmp_logger;
+    // size_t copy_len;
+
+    size = ROUND_UP(size, PAGE_SIZE);
+    ret = map_range_in_pgtbl_kernel(
+        (void *)((unsigned long)boot_ttbr1_l0 + KBASE),
+        LLAMAOUT_BASE,
+        addr,
+        size,
+        VMR_READ | VMR_WRITE | VMR_TZ_NS);
+    flush_tlb_all();
+    if (ret) {
+        goto out;
+    }
+    /*tmp_logger = logger;
+    logger = (void *)LOGGER_BASE;
+    logger->flag.last_pos = tmp_logger->flag.last_pos;
+    logger->flag.write_loops = tmp_logger->flag.write_loops;
+    logger->flag.max_len = size - sizeof(struct log_buffer);
+    copy_len = MIN(tmp_logger->flag.max_len, logger->flag.max_len);
+    memcpy(logger->buffer_start, tmp_logger->buffer_start, copy_len);
+    kfree(tmp_logger);*/
+
+out:
+    return ret;
+}
+
 int sys_debug_rdr_logitem(char *str, size_t str_len)
 {
+    return 0;
     int ret = 0;
     char *kbuf;
     if (check_user_addr_range((vaddr_t)str, str_len)) {

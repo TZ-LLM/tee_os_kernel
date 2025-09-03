@@ -133,6 +133,7 @@ void wait_finish_ipi_tx(u32 target_cpu)
 /* Send IPI tx without argument */
 void send_ipi(u32 target_cpu, u32 ipi_vector)
 {
+    BUG("%s %d\n", __func__, __LINE__);
     prepare_ipi_tx(target_cpu);
     start_ipi_tx(target_cpu, ipi_vector);
     wait_finish_ipi_tx(target_cpu);

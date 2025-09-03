@@ -16,6 +16,7 @@
 #include <mm/kmalloc.h>
 #include <mm/mm.h>
 #include <mm/uaccess.h>
+#include <object/memory.h>
 
 struct cow_private_page {
     struct list_head node;
@@ -44,6 +45,10 @@ static struct vmregion *alloc_vmregion(vaddr_t start, size_t len,
     else if (pmo->type == PMO_TZ_NS)
         vmr->perm |= VMR_TZ_NS;
 #endif /* CHCORE_OH_TEE */
+    else if (pmo->type == PMO_S2)
+        vmr->perm |= VMR_TZ_NS;
+    else if (pmo->type == PMO_TZASC_CMA)
+        vmr->perm |= VMR_TZ_NS;
 
     init_list_head(&vmr->cow_private_pages);
 
@@ -335,8 +340,29 @@ int vmspace_map_range(struct vmspace *vmspace, vaddr_t va, size_t len,
     /* Eager mapping for the following pmo types and otherwise lazy mapping.
      */
     if ((pmo->type == PMO_DATA) || (pmo->type == PMO_DATA_NOCACHE)
-        || (pmo->type == PMO_DEVICE))
+        || (pmo->type == PMO_DEVICE) || (pmo->type == PMO_TZASC_CMA))
         fill_page_table(vmspace, vmr);
+    
+    if (pmo->type == PMO_S2) {
+        size_t mapped = 0;
+        unsigned long current_entry = pmo->entry_begin;
+        struct s2_l1_meta *s2_l1_meta = get_s2_l1_meta();
+        while (mapped < len) {
+            BUG_ON(mapped > vmr->pmo->size);
+            // kinfo("map %ldK\n", s2_l1_meta->entry[current_entry].size / 1024);
+            lock(&vmspace->pgtbl_lock);
+            ret = map_range_in_pgtbl(
+                vmspace->pgtbl,
+                va + mapped,
+                (paddr_t)s2_l1_meta->entry[current_entry].paddr,
+                (size_t)s2_l1_meta->entry[current_entry].size,
+                vmr->perm
+            );
+            unlock(&vmspace->pgtbl_lock);
+            mapped += s2_l1_meta->entry[current_entry].size;
+            current_entry += s2_l1_meta->entry[current_entry].size >> PAGE_SHIFT;
+        }
+    }
 
     return 0;
 

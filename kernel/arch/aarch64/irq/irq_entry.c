@@ -179,6 +179,13 @@ void unexpected_handler(void)
 
 void handle_fiq(void)
 {
-    save_and_release_fpu_owner();
-    smc_call(SMC_STD_RESPONSE, SMC_EXIT_PREEMPTED);
+    current_thread->thread_ctx->state = TS_INTER;
+    current_thread->thread_ctx->kernel_stack_state = KS_FREE;
+    BUG_ON(sched_enqueue(current_thread));
+    current_thread = NULL;
+#if FPU_SAVING_MODE == LAZY_FPU_MODE
+    change_fpu_owner_to_ree();
+#endif
+    // kinfo("%s %d\n", __func__, __LINE__);
+    smc_call(SMC_STD_RESPONSE, SMC_EXIT_PREEMPTED, 0, 0, 0);
 }

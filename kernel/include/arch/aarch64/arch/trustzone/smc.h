@@ -56,10 +56,12 @@ void smc_init(void);
 
 void smc_call(int fid, ...);
 
-int sys_tee_switch_req(struct smc_registers *regs_u);
+unsigned long sys_tee_switch_req(struct smc_registers *regs_u);
 
 int sys_tee_wait_switch_req(struct smc_registers *regs_u);
 
 int sys_tee_pull_kernel_var(kernel_shared_varibles_t *cmd_buf_addr_buf);
+
+void smc_idle_thread_routine(void);
 
 #endif /* ARCH_AARCH64_ARCH_TRUSTZONE_SMC_H */

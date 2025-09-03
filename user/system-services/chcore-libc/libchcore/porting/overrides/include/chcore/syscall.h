@@ -26,6 +26,8 @@ char usys_getc(void);
 
 int usys_tee_push_rdr_update_addr(paddr_t addr, size_t size, bool is_cache_mem,
                                   char *chip_type_buff, size_t buff_len);
+int usys_tee_push_rdr_update_addr2(paddr_t addr, size_t size, bool is_cache_mem,
+                                  char *chip_type_buff, size_t buff_len);
 int usys_debug_rdr_logitem(char *str, size_t str_len);
 
 int usys_get_prio(cap_t thread_cap);
@@ -71,7 +73,7 @@ void usys_get_mem_usage_msg(void);
 void usys_perf_start(void);
 void usys_perf_end(void);
 void usys_perf_null(void);
-void usys_top(void);
+void usys_top(int secure);
 
 int usys_user_fault_register(cap_t notific_cap, vaddr_t msg_buffer);
 int usys_user_fault_map(badge_t client_badge, vaddr_t fault_va,
@@ -86,6 +88,12 @@ cap_t usys_create_notifc(void);
 int usys_wait(cap_t notifc_cap, bool is_block, void *timeout);
 int usys_notify(cap_t notifc_cap);
 void usys_cache_config(unsigned long option);
+
+cap_t usys_create_s2_pmo(unsigned long entry_begin, unsigned long entry_end);
+cap_t usys_create_tzasc_cma_pmo(unsigned long paddr, unsigned long size);
+int usys_map_tzasc_cma_meta(unsigned long vaddr);
+int usys_map_tzasc_cma_pmo(unsigned long vaddr, unsigned long len, paddr_t paddr);
+int usys_config_tzasc(int rgn_id, unsigned long base_mb, unsigned long top_mb);
 
 #ifdef CHCORE_OH_TEE
 cap_t usys_create_ns_pmo(cap_t cap_group, unsigned long paddr,
@@ -128,13 +136,27 @@ enum tz_switch_req {
     TZ_SWITCH_REQ_STD_RESPONSE,
     TZ_SWITCH_REQ_NR
 };
-int usys_tee_wait_switch_req(struct smc_registers *regs);
-int usys_tee_switch_req(struct smc_registers *regs);
+enum smc_ops_exit {
+    SMC_OPS_NORMAL = 0x0,
+    SMC_OPS_SCHEDTO = 0x1,
+    SMC_OPS_START_SHADOW = 0x2,
+    SMC_OPS_START_FIQSHD = 0x3,
+    SMC_OPS_PROBE_ALIVE = 0x4,
+    SMC_OPS_ABORT_TASK = 0x5,
+    SMC_EXIT_NORMAL = 0x0,
+    SMC_EXIT_PREEMPTED = 0x1,
+    SMC_EXIT_SHADOW = 0x2,
+    SMC_EXIT_ABORT = 0x3,
+    SMC_EXIT_MAX = 0x4,
+};
+unsigned long usys_tee_wait_switch_req(struct smc_registers *regs);
+unsigned long usys_tee_switch_req(struct smc_registers *regs);
 int usys_tee_create_ns_pmo(unsigned long paddr, unsigned long size);
 int usys_tee_pull_kernel_var(unsigned long cmd_buf_addr_buf);
 void usys_disable_local_irq(void);
 void usys_enable_local_irq(void);
 void usys_poweroff(void);
+cap_t usys_create_npu_irq_notif(paddr_t npu_base, size_t irq);
 
 #ifdef __cplusplus
 }

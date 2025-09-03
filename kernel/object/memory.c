@@ -553,6 +553,14 @@ static int pmo_init(struct pmobject *pmo, pmo_type_t type, size_t len,
         /* This type marks the corresponding area cannot be accessed */
         break;
     }
+    case PMO_TZASC_CMA: {
+        pmo->start = paddr;
+        break;
+    }
+    case PMO_S2: {
+        kinfo("create s2 pmo\n");
+        break;
+    }
     default: {
         ret = -EINVAL;
         break;
@@ -644,14 +652,20 @@ void pmo_deinit(void *pmo_ptr)
 
         break;
     }
-    case PMO_DEVICE:
 #ifdef CHCORE_OH_TEE
     case PMO_TZ_NS: {
         kfree(pmo->private);
         break;
     }
 #endif /* CHCORE_OH_TEE */
+    case PMO_DEVICE:
     case PMO_FORBID: {
+        break;
+    }
+    case PMO_TZASC_CMA: {
+        break;
+    }
+    case PMO_S2: {
         break;
     }
     default: {
@@ -819,6 +833,161 @@ out:
 unsigned long sys_get_free_mem_size(void)
 {
     return get_free_mem_size();
+}
+
+extern unsigned long boot_ttbr1_l0[];
+
+#define TZASC_CMA_META_VADDR 0xFFFFFC0000000000
+
+struct tzasc_cma_meta *tzasc_cma_meta = NULL;
+paddr_t g_tzasc_cma_meta_paddr = 0;
+
+void tzasc_cma_meta_init(unsigned long tzasc_cma_meta_paddr)
+{
+    kinfo("%s with paddr %p\n", __func__, (void *)tzasc_cma_meta_paddr);
+    g_tzasc_cma_meta_paddr = tzasc_cma_meta_paddr;
+
+    tzasc_cma_meta = (struct tzasc_cma_meta *)TZASC_CMA_META_VADDR;
+    int i, ret;
+    unsigned long size = PAGE_SIZE << 10;
+
+    ret = map_range_in_pgtbl_kernel(
+        (void *)((unsigned long)boot_ttbr1_l0 + KBASE),
+        (vaddr_t)TZASC_CMA_META_VADDR,
+        (paddr_t)tzasc_cma_meta_paddr,
+        (size_t)size,
+        VMR_READ | VMR_WRITE | VMR_TZ_NS
+    );
+    BUG_ON(ret != 0);
+    kinfo("%s %d base %lx size %lx\n", __func__, __LINE__, tzasc_cma_meta->base, tzasc_cma_meta->size);
+}
+
+cap_t sys_create_tzasc_cma_pmo(unsigned long paddr, unsigned long size)
+{
+    cap_t r;
+
+    if (size == 0)
+        return -EINVAL;
+
+    BUG_ON(tzasc_cma_meta == NULL);
+
+    r = create_pmo(tzasc_cma_meta->size, PMO_TZASC_CMA, current_cap_group, tzasc_cma_meta->base, NULL);
+
+    return r;
+}
+
+int sys_map_tzasc_cma_meta(unsigned long vaddr)
+{
+    struct vmspace *vmspace;
+    int ret;
+
+    vmspace = obj_get(current_cap_group, VMSPACE_OBJ_ID, TYPE_VMSPACE);
+    if (vmspace == NULL) {
+        ret = -ECAPBILITY;
+        goto out;
+    }
+
+    BUG_ON(g_tzasc_cma_meta_paddr == 0);
+    lock(&vmspace->pgtbl_lock);
+    ret = map_range_in_pgtbl(
+        vmspace->pgtbl,
+        vaddr,
+        g_tzasc_cma_meta_paddr,
+        PAGE_SIZE << 10,
+        VMR_READ | VMR_TZ_NS
+    );
+    unlock(&vmspace->pgtbl_lock);
+
+    obj_put(vmspace);
+
+out:
+    return ret;
+}
+
+int sys_map_tzasc_cma_pmo(unsigned long vaddr, unsigned long len, paddr_t paddr)
+{
+    struct vmspace *vmspace;
+    int ret;
+
+    vmspace = obj_get(current_cap_group, VMSPACE_OBJ_ID, TYPE_VMSPACE);
+    if (vmspace == NULL) {
+        ret = -ECAPBILITY;
+        goto out;
+    }
+
+    lock(&vmspace->pgtbl_lock);
+    ret = map_range_in_pgtbl(
+        vmspace->pgtbl,
+        vaddr,
+        paddr,
+        len,
+        VMR_READ | VMR_WRITE
+    );
+    unlock(&vmspace->pgtbl_lock);
+
+    obj_put(vmspace);
+
+out:
+    return ret;
+}
+
+#define S2_L0_META_VADDR     0xFFFFFA0000000000
+#define S2_L1_META_VADDR     0xFFFFFB0000000000
+
+struct s2_l0_meta *s2_l0_meta = NULL;
+struct s2_l1_meta *s2_l1_meta = NULL;
+
+void s2_meta_init(unsigned long s2_meta_paddr)
+{
+    kinfo("%s with paddr %p\n", __func__, (void *)s2_meta_paddr);
+
+    s2_l0_meta = (struct s2_l0_meta *)S2_L0_META_VADDR;
+    s2_l1_meta = (struct s2_l1_meta *)S2_L1_META_VADDR;
+    int i, ret;
+    unsigned long size = PAGE_SIZE;
+
+    ret = map_range_in_pgtbl_kernel(
+        (void *)((unsigned long)boot_ttbr1_l0 + KBASE),
+        (vaddr_t)S2_L0_META_VADDR,
+        (paddr_t)s2_meta_paddr,
+        (size_t)size,
+        VMR_READ | VMR_WRITE | VMR_TZ_NS
+    );
+    BUG_ON(ret != 0);
+
+    unsigned long prefix_offset = 0;
+    for (i = 0; i < s2_l0_meta->entry_nr; i++) {
+        ret = map_range_in_pgtbl_kernel(
+            (void *)((unsigned long)boot_ttbr1_l0 + KBASE),
+            (vaddr_t)(S2_L1_META_VADDR + prefix_offset),
+            (paddr_t)s2_l0_meta->entry[i].paddr,
+            (size_t)s2_l0_meta->entry[i].size,
+            VMR_READ | VMR_WRITE | VMR_TZ_NS
+        );
+        BUG_ON(ret != 0);
+        prefix_offset += s2_l0_meta->entry[i].size;
+    }
+
+    // s2_l1_meta->entry[600000].size = 123;
+}
+
+cap_t sys_create_s2_pmo(unsigned long entry_begin, unsigned long entry_end)
+{
+    cap_t ret;
+    struct pmobject *pmo;
+
+    ret = create_pmo(0, PMO_S2, current_cap_group, 0, &pmo);
+    BUG_ON(ret < 0);
+
+    pmo->entry_begin = entry_begin;
+    pmo->entry_end = entry_end;
+    pmo->size = (entry_end - entry_begin) << PAGE_SHIFT;
+
+    return ret;
+}
+
+struct s2_l1_meta *get_s2_l1_meta(void) {
+    return s2_l1_meta;
 }
 
 #ifdef CHCORE_OH_TEE
@@ -1051,3 +1220,35 @@ out:
     return ret;
 }
 #endif /* CHCORE_OH_TEE */
+
+struct lock tzasc_lock;
+
+#define SLOT_NR (16)
+unsigned long base[SLOT_NR];
+unsigned long last[SLOT_NR];
+
+int sys_config_tzasc(int rgn_id, unsigned long base_addr, unsigned long top_addr)
+{
+    int dsu_fw_rgn_alter(unsigned long base_mb, unsigned long top_mb, int rgn_id);
+    int dsu_fw_rgn_enable(int rgn_id, bool enable);
+    int ddr_fw_rgn_alter(unsigned long base_mb, unsigned long top_mb, int rgn_id);
+    int ddr_fw_rgn_enable(int rgn_id, bool enable);
+
+    if (top_addr == 0) return 0;
+
+    lock(&tzasc_lock);
+    BUG_ON(rgn_id < 8 || rgn_id >= 12);
+    BUG_ON(base[rgn_id] && last[rgn_id] != base_addr);
+    if (!base[rgn_id]) {
+        base[rgn_id] = base_addr;
+    }
+    last[rgn_id] = top_addr;
+    base_addr = base[rgn_id];
+    BUG_ON(dsu_fw_rgn_alter(base_addr >> 20, top_addr >> 20, rgn_id));
+    BUG_ON(dsu_fw_rgn_enable(rgn_id, true));
+    BUG_ON(ddr_fw_rgn_alter(base_addr >> 20, top_addr >> 20, rgn_id));
+    BUG_ON(ddr_fw_rgn_enable(rgn_id, true));
+out:
+    unlock(&tzasc_lock);
+    return 0;
+}

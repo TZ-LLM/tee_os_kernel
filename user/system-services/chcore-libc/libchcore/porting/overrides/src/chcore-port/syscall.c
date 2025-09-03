@@ -41,6 +41,17 @@ int usys_tee_push_rdr_update_addr(paddr_t addr, size_t size, bool is_cache_mem,
                            buff_len);
 }
 
+int usys_tee_push_rdr_update_addr2(paddr_t addr, size_t size, bool is_cache_mem,
+                                  char *chip_type_buff, size_t buff_len)
+{
+    return chcore_syscall5(CHCORE_SYS_tee_push_rdr_update_addr2,
+                           addr,
+                           size,
+                           is_cache_mem,
+                           (long)chip_type_buff,
+                           buff_len);
+}
+
 int usys_debug_rdr_logitem(char *str, size_t str_len)
 {
     return chcore_syscall2(CHCORE_SYS_debug_rdr_logitem, (long)str, str_len);
@@ -65,6 +76,31 @@ cap_t usys_create_device_pmo(unsigned long paddr, unsigned long size)
 cap_t usys_create_pmo(unsigned long size, unsigned long type)
 {
     return chcore_syscall2(CHCORE_SYS_create_pmo, size, type);
+}
+
+cap_t usys_create_s2_pmo(unsigned long entry_begin, unsigned long entry_end)
+{
+    return chcore_syscall2(CHCORE_SYS_create_s2_pmo, entry_begin, entry_end);
+}
+
+cap_t usys_create_tzasc_cma_pmo(unsigned long paddr, unsigned long size)
+{
+    return chcore_syscall2(CHCORE_SYS_create_tzasc_cma_pmo, paddr, size);
+}
+
+int usys_map_tzasc_cma_meta(unsigned long vaddr)
+{
+    return chcore_syscall1(CHCORE_SYS_map_tzasc_cma_meta, vaddr);
+}
+
+int usys_map_tzasc_cma_pmo(unsigned long vaddr, unsigned long len, paddr_t paddr)
+{
+    return chcore_syscall3(CHCORE_SYS_map_tzasc_cma_pmo, vaddr, len, paddr);
+}
+
+int usys_config_tzasc(int rgn_id, unsigned long base_addr, unsigned long top_addr)
+{
+    return chcore_syscall3(CHCORE_SYS_config_tzasc, rgn_id, base_addr, top_addr);
 }
 
 int usys_map_pmo(cap_t cap_group_cap, cap_t pmo_cap, unsigned long addr,
@@ -215,9 +251,9 @@ void usys_perf_null(void)
     chcore_syscall0(CHCORE_SYS_perf_null);
 }
 
-void usys_top(void)
+void usys_top(int secure)
 {
-    chcore_syscall0(CHCORE_SYS_top);
+    chcore_syscall1(CHCORE_SYS_top, secure);
 }
 
 int usys_user_fault_register(cap_t notific_cap, vaddr_t msg_buffer)
@@ -421,12 +457,12 @@ void usys_get_pci_device(int dev_class, unsigned long uaddr)
     chcore_syscall2(CHCORE_SYS_get_pci_device, dev_class, uaddr);
 }
 
-int usys_tee_wait_switch_req(struct smc_registers *regs)
+unsigned long usys_tee_wait_switch_req(struct smc_registers *regs)
 {
     return chcore_syscall1(CHCORE_SYS_tee_wait_switch_req, (long)regs);
 }
 
-int usys_tee_switch_req(struct smc_registers *regs)
+unsigned long usys_tee_switch_req(struct smc_registers *regs)
 {
     return chcore_syscall1(CHCORE_SYS_tee_switch_req, (long)regs);
 }
@@ -454,4 +490,9 @@ void usys_enable_local_irq(void)
 void usys_poweroff(void)
 {
     chcore_syscall0(CHCORE_SYS_poweroff);
+}
+
+cap_t usys_create_npu_irq_notif(paddr_t npu_base, size_t irq)
+{
+    return chcore_syscall2(CHCORE_SYS_create_npu_irq_notif, npu_base, irq);
 }

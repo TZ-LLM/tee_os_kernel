@@ -169,6 +169,8 @@ void sys_poweroff(void)
     plat_poweroff();
 }
 
+extern cap_t sys_create_npu_irq_notif(paddr_t npu_base, size_t irq);
+
 const void *syscall_table[NR_SYSCALL] = {
     [0 ... NR_SYSCALL - 1] = sys_null_placeholder,
 
@@ -193,6 +195,11 @@ const void *syscall_table[NR_SYSCALL] = {
     [SYS_create_tee_shared_pmo] = sys_create_tee_shared_pmo,
     [SYS_transfer_pmo_owner] = sys_transfer_pmo_owner,
 #endif /* CHCORE_OH_TEE */
+    [SYS_create_s2_pmo] = sys_create_s2_pmo,
+    [SYS_create_tzasc_cma_pmo] = sys_create_tzasc_cma_pmo,
+    [SYS_map_tzasc_cma_meta] = sys_map_tzasc_cma_meta,
+    [SYS_map_tzasc_cma_pmo] = sys_map_tzasc_cma_pmo,
+    [SYS_config_tzasc] = sys_config_tzasc,
 
     /* - address translation */
     [SYS_get_phys_addr] = sys_get_phys_addr,
@@ -293,4 +300,6 @@ const void *syscall_table[NR_SYSCALL] = {
     [SYS_tee_create_ns_pmo] = sys_tee_create_ns_pmo,
     [SYS_tee_pull_kernel_var] = sys_tee_pull_kernel_var,
 #endif /* CHCORE_OH_TEE */
+[SYS_tee_push_rdr_update_addr2] = sys_tee_push_rdr_update_addr2,
+    [SYS_create_npu_irq_notif] = sys_create_npu_irq_notif,
 };
